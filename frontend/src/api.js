@@ -1,48 +1,58 @@
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+import { createContext, useContext, useEffect, useState } from "react";
+import { api, getToken, setToken } from "../api.js";
 
-async function request(path, options = {}) {
-  const res = await fetch(`${BASE_URL}${path}`, {
-    credentials: "include",
-    headers: options.body instanceof FormData
-      ? {}
-      : { "Content-Type": "application/json" },
-    ...options,
-  });
+const AuthContext = createContext(null);
 
-  let data = null;
-  const text = await res.text();
-  if (text) {
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    // Only bother checking the session if we actually have a stored token —
+    // otherwise every first visit fires a doomed 401 request.
+    if (!getToken()) {
+      setChecking(false);
+      return;
+    }
+    api
+      .me()
+      .then((data) => setUser(data.user))
+      .catch(() => {
+        setToken(null);
+        setUser(null);
+      })
+      .finally(() => setChecking(false));
+  }, []);
+
+  async function login(payload) {
+    const data = await api.login(payload);
+    setToken(data.token);
+    setUser(data.user);
+  }
+
+  async function register(payload) {
+    const data = await api.register(payload);
+    setToken(data.token);
+    setUser(data.user);
+  }
+
+  async function logout() {
     try {
-      data = JSON.parse(text);
-    } catch {
-      data = null;
+      await api.logout();
+    } finally {
+      setToken(null);
+      setUser(null);
     }
   }
 
-  if (!res.ok) {
-    const message = data?.message || `Request failed (${res.status})`;
-    throw new Error(message);
-  }
-
-  return data;
+  return (
+    <AuthContext.Provider value={{ user, checking, login, register, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
-export const api = {
-  register: (payload) =>
-    request("/auth/register", { method: "POST", body: JSON.stringify(payload) }),
-  login: (payload) =>
-    request("/auth/login", { method: "POST", body: JSON.stringify(payload) }),
-  logout: () => request("/auth/logout", { method: "POST" }),
-  me: () => request("/auth/me"),
+export function useAuth() {
+  return useContext(AuthContext);
+}
 
-  listFiles: () => request("/files"),
-  uploadFile: (formData) =>
-    request("/files/upload", { method: "POST", body: formData }),
-  getDownloadUrl: (id) => request(`/files/${id}/download`),
-  deleteFile: (id) => request(`/files/${id}`, { method: "DELETE" }),
-
-  smartSearch: (query) =>
-    request("/ai/search", { method: "POST", body: JSON.stringify({ query }) }),
-  chatWithFiles: (question) =>
-    request("/ai/chat", { method: "POST", body: JSON.stringify({ question }) }),
-};

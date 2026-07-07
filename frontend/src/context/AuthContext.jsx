@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { api } from "../api.js";
+import { api, getToken, setToken } from "../api.js";
 
 const AuthContext = createContext(null);
 
@@ -8,26 +8,41 @@ export function AuthProvider({ children }) {
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
+    // Only bother checking the session if we actually have a stored token —
+    // otherwise every first visit fires a doomed 401 request.
+    if (!getToken()) {
+      setChecking(false);
+      return;
+    }
     api
       .me()
       .then((data) => setUser(data.user))
-      .catch(() => setUser(null))
+      .catch(() => {
+        setToken(null);
+        setUser(null);
+      })
       .finally(() => setChecking(false));
   }, []);
 
   async function login(payload) {
     const data = await api.login(payload);
+    setToken(data.token);
     setUser(data.user);
   }
 
   async function register(payload) {
     const data = await api.register(payload);
+    setToken(data.token);
     setUser(data.user);
   }
 
   async function logout() {
-    await api.logout();
-    setUser(null);
+    try {
+      await api.logout();
+    } finally {
+      setToken(null);
+      setUser(null);
+    }
   }
 
   return (
@@ -40,3 +55,4 @@ export function AuthProvider({ children }) {
 export function useAuth() {
   return useContext(AuthContext);
 }
+

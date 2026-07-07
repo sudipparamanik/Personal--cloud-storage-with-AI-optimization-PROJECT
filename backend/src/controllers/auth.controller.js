@@ -2,13 +2,6 @@ const userModel = require("../models/user");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 
-const COOKIE_OPTIONS = {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-};
-
 async function registerUser(req, res) {
     const { username, email, password } = req.body;
 
@@ -37,9 +30,9 @@ async function registerUser(req, res) {
         id: user._id,
     }, process.env.JWT_SECRET, { expiresIn: "7d" });
 
-    res.cookie("token", token, COOKIE_OPTIONS);
     res.status(201).json({
         message: "User registered successfully",
+        token,
         user: {
             id: user._id,
             username: user.username,
@@ -72,10 +65,9 @@ async function loginUser(req, res) {
         id: user._id
     }, process.env.JWT_SECRET, { expiresIn: "7d" });
 
-    res.cookie("token", token, COOKIE_OPTIONS);
-
     res.status(200).json({
         message: "User logged in successfully",
+        token,
         user: {
             id: user._id,
             username: user.username,
@@ -85,7 +77,9 @@ async function loginUser(req, res) {
 }
 
 async function logoutUser(req, res) {
-    res.clearCookie("token", COOKIE_OPTIONS);
+    // Nothing to clear server-side with bearer tokens — the frontend just
+    // discards the token it's holding. This endpoint stays for symmetry
+    // with the frontend's existing logout() call.
     res.status(200).json({ message: "User logged out successfully" });
 }
 
